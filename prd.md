@@ -13,7 +13,7 @@
 - **Security**: Verify header `X-HMAC-SHA256-SIGNATURE` using raw request body and your secret; compare **uppercase hex** HMAC‑SHA256.
 - **Idempotency**: Upstream supports idempotent behavior by token; your fulfillment must be idempotent (check order state before changes).
 - **Statuses** (int codes): `0 Initialize`, `1 Pending`, `2 PartialPaid`, `3 WaitingToConfirm`, `4 Timeout`, `5 UserCanceled`, `7 Paid`, `8 Approve`, `9 Reject`.
-- **Speed / Risk**: `riskSpeed` — `0=High` (accept on mempool), `1=Low` (accept on confirmations). Merchants choose.
+- **Speed / Risk**: `riskSpeed` — `0=High` (redirect users on mempool, and wait for confirmation), `1=Low` (wait and accept on confirmations). Merchants choose.
 - **Never** assume payment complete from the browser redirect; always Verify API.
 
 ## API Surface (v1)
