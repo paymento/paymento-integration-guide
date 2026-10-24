@@ -31,7 +31,7 @@ Framework notes:
 
 ## Processing safely
 
-Paymento retries a failed callback only while the order is still `Paid`: after 1 minute, 5 minutes, 30 minutes, 2 hours, 12 hours and 24 hours (7 attempts in total). Callbacks for other statuses are not retried, and the first successful verify moves `Paid` to `Approve`, which ends the retries. So the integration owns its own retries:
+Paymento retries a failed callback only while the order is still `Paid`: after 1 minute, 5 minutes, 30 minutes, 2 hours, 12 hours and 24 hours (7 attempts in total). Callbacks for other statuses are not retried, and the first successful verify moves `Paid` to `Approve`, which ends the retries. So the integration owns its own retries, and **verify is called only from the processing step below** — never directly from a return page, an admin "check status" button or a cron job. A verify outside this flow can approve a `Paid` order whose callback never arrived, ending Paymento's retries with nothing stored to fulfil it.
 
 1. Check the signature.
 2. Insert a **new row** for this callback (`id`, `token`, `received_at`, `processed_at NULL`). One row per callback, not per token, so an earlier status can never mark a later one done. If this insert fails, answer `5xx` (Paymento may retry).
@@ -54,7 +54,9 @@ When the customer leaves the gateway, the browser is redirected with a GET:
 https://merchant.example/payments/return?token=3256e147…&orderId=etp-3900&status=3
 ```
 
-It is not signed and anyone can build it. Use it to show the customer a status page (optionally after calling verify server-side to show the real status). Never fulfil or cancel an order from it.
+It is not signed and anyone can build it. Never fulfil or cancel an order from its parameters.
+
+Show the customer the status **stored on your order**. To refresh it (useful when the IPN was lost), only for a token your store created and saved with the order, and only while that order is not final: insert an inbox row for the token and run the same locked processor as a callback, then show the stored status. Ignore unknown tokens, so a crafted URL cannot fill the inbox. The Node.js reference's `paymentoReturnStatus` does exactly this.
 
 ## Testing
 

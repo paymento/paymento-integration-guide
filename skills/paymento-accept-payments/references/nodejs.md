@@ -19,7 +19,11 @@ PAYMENTO_RETURN_URL=https://merchant.example/payments/return
 | `PaymentoInbox.markProcessed(id)` | Set `processedAt` on that row only. |
 | `PaymentoInbox.pending()` | Rows with `processedAt = null`, oldest first. |
 | `Orders.withPaymentoLock(token, fn)` | Run `fn` while holding a lock shared by every process (Postgres `pg_advisory_xact_lock(hashtext(token))`, MySQL `GET_LOCK`, or `SELECT … FOR UPDATE` on a row keyed by token). Never an in-memory mutex. |
-| `Orders.applyPaymentoStatus(orderId, status)` | Idempotent. Never move a paid order (7/8) back to an unpaid status; only `10 Refunded` may follow. |
+| `Orders.applyPaymentoStatus(orderId, status)` | Idempotent; records `status` as the order's `paymentoStatus`. Never move a paid order (7/8) back to an unpaid status; only `10 Refunded` may follow. |
+| `Orders.savePaymentoToken(orderId, token)` | Store the token with the order (an order can have several tokens). |
+| `Orders.findByPaymentoToken(token)` | The order holding that token, as `{ paymentoStatus }`, or `null` for a token this store did not create. |
+
+Call `paymento.verify` only from `processPaymentoCallback`. A verify anywhere else can approve a `Paid` order whose callback never arrived, which ends Paymento's retries with nothing stored to fulfil it.
 
 **Types**
 
@@ -96,6 +100,7 @@ export async function createGatewayUrl(input:{orderId:string; amount:string; cur
     orderId: input.orderId,
     riskSpeed: 0,
   });
+  await Orders.savePaymentoToken(input.orderId, token);   // the return page and reconciliation look orders up by token
   return `https://app.paymento.io/gateway?token=${encodeURIComponent(token)}`;
 }
 ```
@@ -151,4 +156,22 @@ export async function retryPendingPaymentoCallbacks(){
 // Paymento sends PUT unless ipN_Method is 1, so accept both.
 app.post("/api/paymento/ipn", express.raw({type:"application/json"}), ipnHandler);
 app.put ("/api/paymento/ipn", express.raw({type:"application/json"}), ipnHandler);
+```
+
+**Return page**
+
+The return URL's `status` parameter is unsigned, so the page shows the stored status. A token this store created, on an order that is not final yet, goes through the same stored, locked flow as a callback. That way a lost IPN still gets fulfilled, and Verify is never called outside `processPaymentoCallback`. Unknown tokens are ignored, so a crafted URL cannot fill the inbox.
+
+```ts
+const FINAL_STATUSES = [7, 8, 9, 10];
+export async function paymentoReturnStatus(token:string):Promise<number|null>{
+  const order = await Orders.findByPaymentoToken(token);
+  if(!order) return null;   // not a token this store created: show a generic page
+  if(!FINAL_STATUSES.includes(order.paymentoStatus)){
+    const id = await PaymentoInbox.save(token);
+    await processPaymentoCallback(id, token).catch(err => console.error("PAYMENTO_RETURN_DEFERRED", id, err));
+  }
+  return (await Orders.findByPaymentoToken(token))!.paymentoStatus;
+}
+// app.get("/payments/return", async (req,res)=>{ const status = await paymentoReturnStatus(String(req.query.token ?? "")); /* render */ });
 ```

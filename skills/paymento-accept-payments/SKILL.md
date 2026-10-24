@@ -23,7 +23,7 @@ If the merchant uses WooCommerce, OpenCart or WHMCS, point them to the ready-mad
 Base URL `https://api.paymento.io`. Every call sends the header `Api-Key: <PAYMENTO_API_KEY>` and JSON. Every response is `{ success, message, body }`.
 
 0. **Set the IPN URL once per store**: `POST /v1/payment/settings` with `{ "ipN_URL": "https://…/api/paymento/ipn", "ipN_Method": 1 }`. It persists; do not call it per payment. A one-off setup script or admin action is enough.
-1. **Create the payment**: `POST /v1/payment/request` with `{ fiatAmount, fiatCurrency, returnUrl, orderId }` (optional: `riskSpeed`, `language`, `emailAddress`, `tokenExpiryDate`, `cryptoAmounts`, `additionalData`). Check `success`, then the token is `body`.
+1. **Create the payment**: `POST /v1/payment/request` with `{ fiatAmount, fiatCurrency, returnUrl, orderId }` (optional: `riskSpeed`, `language`, `emailAddress`, `tokenExpiryDate`, `cryptoAmounts`, `additionalData`). Check `success`, then the token is `body`. Save the token with the order before redirecting.
 2. **Redirect** the customer to `https://app.paymento.io/gateway?token={token}`.
 3. **Receive the IPN** at the IPN URL: check the `X-HMAC-SHA256-Signature` header, store the callback durably, answer `2xx`.
 4. **Verify**: `POST /v1/payment/verify` with `{ "token": "…" }` and act on `body.orderStatus`.
@@ -40,11 +40,11 @@ Each of these is a real failure mode. Apply all of them.
 3. **Verify approves.** The first verify on a `Paid (7)` order moves it to `Approve (8)` and returns `success: true`. Repeating it is safe.
 4. **The IPN method defaults to PUT.** `ipN_Method` `1` is POST and `2` is PUT; any other value, including `0`, is sent as PUT. Set `1`, or accept both methods on the IPN route.
 5. **Check the signature over the raw body.** Uppercase hex HMAC-SHA256 of the exact request bytes, keyed with the secret key as UTF-8 text, compared in constant time. Parse JSON only after it matches. Answer `401` if the header is missing or wrong.
-6. **Store the callback before calling verify.** Paymento retries a failed callback only while the order is still `Paid`, and your first verify moves it to `Approve`. If your server fails between verify and updating the order, Paymento never calls again. Save each authenticated callback as its own row, answer `2xx` once it is saved, and retry unprocessed rows from your own job.
+6. **Store the callback before calling verify.** Paymento retries a failed callback only while the order is still `Paid`, and your first verify moves it to `Approve`. If your server fails between verify and updating the order, Paymento never calls again. Save each authenticated callback as its own row, answer `2xx` once it is saved, and retry unprocessed rows from your own job. Call verify **only** from that processing flow — not from a return page, an admin button or a cron job — or a `Paid` order whose callback was lost gets approved with nothing stored to fulfil it.
 7. **One processor per token at a time.** The IPN handler and the retry job can run the same token together; an older verify result can then overwrite a newer one. Hold a lock shared by every process (database advisory lock or `SELECT … FOR UPDATE`) around verify and the order update.
 8. **Never un-pay an order.** One store order can have several tokens (a customer who retries checkout), and an abandoned token still reports `Timeout` or `UserCanceled` later. Once an order is paid (`7`/`8`), ignore any non-paid status; only `10 Refunded` may follow.
 9. **The callback body is PascalCase; API responses are camelCase.** Callback: `{ Token, PaymentId, OrderId, OrderStatus, AdditionalData: [{ Key, Value }] }`. `PaymentId` and `OrderId` are strings, `OrderStatus` is an integer. All enums are integers in JSON.
-10. **The return URL is unsigned.** The browser arrives with `?token=…&orderId=…&status=…`. Use it to show a page, never to change an order.
+10. **The return URL is unsigned.** The browser arrives with `?token=…&orderId=…&status=…`. Show the status stored on your order; never change an order from the URL. To refresh a lost IPN, run a token your store created through the same stored, locked processing flow (see `paymentoReturnStatus` in the Node.js reference).
 11. **`riskSpeed` does not change when you may fulfil.** `0` (default) tells the customer "payment received" as soon as it is seen on-chain; `1` waits for confirmations. The order reaches `Paid` only after the required confirmations either way.
 12. **`fiatAmount` is a string with a `.` decimal point** (`"1000.50"`). Thousands separators and decimal commas are refused.
 
@@ -86,7 +86,8 @@ Keep the code in the project's existing style and layers: an API client module, 
 - [ ] Each authenticated callback is stored before verify; a job retries unprocessed ones.
 - [ ] Verify and the order update run under a cross-process lock per token.
 - [ ] Fulfilment branches on `body.orderStatus`, is idempotent, and never un-pays an order.
-- [ ] The return URL page shows status only and changes nothing.
+- [ ] The payment token is saved with the order at creation.
+- [ ] Verify is called only from the callback processor; the return page shows the stored status and refreshes only known tokens through that processor.
 - [ ] All statuses in the table above are handled, including `10 Refunded`.
 
 ## Sources

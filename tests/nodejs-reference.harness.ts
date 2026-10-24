@@ -6,7 +6,10 @@ declare namespace express { type RequestHandler = any }
 process.env.PAYMENTO_IPN_SECRET="my-secret"; process.env.PAYMENTO_API_BASE="https://x"; process.env.PAYMENTO_API_KEY="k";
 const applied:any[]=[]; let failApply=false, failSave=false;
 const locks=new Map<string,Promise<any>>(); let useLock=true;
-const Orders={ async applyPaymentoStatus(id:string,s:number){ if(failApply) throw new Error("db down"); applied.push([id,s]); },
+const tokenToOrder=new Map<string,string>(); const orderStatus=new Map<string,number>();
+const Orders={ async applyPaymentoStatus(id:string,s:number){ if(failApply) throw new Error("db down"); applied.push([id,s]); orderStatus.set(id,s); },
+  async savePaymentoToken(orderId:string, token:string){ tokenToOrder.set(token, orderId); if(!orderStatus.has(orderId)) orderStatus.set(orderId, 0); },
+  async findByPaymentoToken(token:string){ const id=tokenToOrder.get(token); return id===undefined ? null : { paymentoStatus: orderStatus.get(id)! }; },
   async withPaymentoLock(key:string, fn:()=>Promise<void>){
     if(!useLock) return fn();
     const prev=locks.get(key)??Promise.resolve(); const run=prev.then(fn,fn); locks.set(key, run.catch(()=>{})); return run; } };
@@ -65,4 +68,20 @@ nextResponse={success:false,message:"Please set amount",body:null};
 await assert.rejects(paymento.request({}), /PAYMENTO_REQUEST_FAILED: Please set amount/);
 nextResponse={success:true,message:"",body:" 3256e147c6fe4d36a9341a5112ed2214"};
 assert.equal(await createGatewayUrl({orderId:"1",amount:"10",currency:"USD"}), "https://app.paymento.io/gateway?token=3256e147c6fe4d36a9341a5112ed2214");
+assert.equal(tokenToOrder.get("3256e147c6fe4d36a9341a5112ed2214"), "1", "createGatewayUrl saves the token");
+// return page
+let verifyCalls=0;
+(globalThis as any).fetch = async ()=>{ verifyCalls++; return { ok:true, text:async()=>"", json:async()=>nextResponse }; };
+const rowsBefore=rows.length;
+assert.equal(await paymentoReturnStatus("crafted-token"), null); assert.equal(rows.length, rowsBefore, "unknown token stores nothing"); assert.equal(verifyCalls, 0);
+// known token, IPN lost: the return page runs the stored, locked flow and fulfils
+nextResponse={success:true,message:"",body:{token:"3256e147c6fe4d36a9341a5112ed2214",orderId:"1",orderStatus:8,additionalData:[]}};
+assert.equal(await paymentoReturnStatus("3256e147c6fe4d36a9341a5112ed2214"), 8); assert.equal(verifyCalls, 1);
+assert.equal(rows.at(-1).token, "3256e147c6fe4d36a9341a5112ed2214"); assert.equal(rows.at(-1).done, true); assert.deepEqual(applied.at(-1), ["1", 8]);
+// final order: no verify, no row
+const rowsFinal=rows.length; assert.equal(await paymentoReturnStatus("3256e147c6fe4d36a9341a5112ed2214"), 8); assert.equal(verifyCalls, 1); assert.equal(rows.length, rowsFinal);
+// processing fails: row stays pending for the retry job, page shows the stored status
+await Orders.savePaymentoToken("2","tok-2"); failApply=true;
+nextResponse={success:true,message:"",body:{token:"tok-2",orderId:"2",orderStatus:8,additionalData:[]}};
+assert.equal(await paymentoReturnStatus("tok-2"), 0); assert.equal(rows.at(-1).done, false); failApply=false;
 console.log("nodejs reference: all checks passed");
