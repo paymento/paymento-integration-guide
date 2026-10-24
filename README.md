@@ -8,23 +8,33 @@ Paymento empowers merchants to accept cryptocurrency payments **directly wallet-
 
 ## 📖 Contents
 
-- [`prd.md`](./prd.md) – Product Requirement Document (technical + business flow)
-- Example code snippets (TypeScript, Node.js, .NET)
-- API references (Swagger + docs)
+- [`prd.md`](./prd.md) – Product Requirement Document (technical + business flow, drop-in TypeScript snippets)
+- [`swagger.json`](./swagger.json) – OpenAPI schema of the external API
+- API reference: https://docs.paymento.io
 
 ---
 
 ## 🚀 Quick Start
 
+Base URL: `https://api.paymento.io` · every call sends `Api-Key: <YOUR_API_KEY>`.
+
+### 0. Set the IPN URL (once per store)
+
+```bash
+POST /v1/payment/settings
+Body: { "ipN_URL": "https://merchant.com/api/paymento/ipn", "ipN_Method": 1 }
+```
+
+`ipN_Method`: `1` = POST, `2` = PUT. Any other value (including `0`) is sent as **PUT**.
+
 ### 1. Create Payment
 
 ```bash
 POST /v1/payment/request
-Headers: Api-Key: <YOUR_API_KEY>
 Body: { fiatAmount, fiatCurrency, returnUrl, orderId, riskSpeed }
 ```
 
-→ Receive a token
+→ `{ success, message, body: token }`. Failures return HTTP 200 with `success: false` and a `message` — check `success` before redirecting.
 
 ### 2. Redirect Customer
 
@@ -34,8 +44,10 @@ https://app.paymento.io/gateway?token=YOUR_TOKEN
 
 ### 3. Receive Callback (IPN)
 
-- Verify the `X-HMAC-SHA256-SIGNATURE` header
-- Use raw POST body + your Paymento secret to validate
+- Body (PascalCase): `{ Token, PaymentId, OrderId, OrderStatus, AdditionalData }` — `PaymentId`/`OrderId` are strings, `OrderStatus` an integer
+- Verify the `X-HMAC-SHA256-SIGNATURE` header: uppercase hex HMAC-SHA256 of the raw body with your secret key; answer `401` on mismatch
+- Store the callback durably **before** calling Verify, and retry unprocessed ones yourself: Verify moves `Paid` to `Approve`, after which Paymento stops retrying
+- Process one callback per token at a time (a lock shared across processes), and never move a paid order back to unpaid — an abandoned token of the same order can still report `Timeout`
 
 ### 4. Verify Payment
 
@@ -43,7 +55,11 @@ https://app.paymento.io/gateway?token=YOUR_TOKEN
 POST /v1/payment/verify { token }
 ```
 
-→ Returns `{ orderId, orderStatus }`
+→ `{ success, message, body: { token, orderId, orderStatus, additionalData, settlement } }`
+
+- `success` is `true` **only** when the order is `Approve (8)`. `success: false` is not an error — branch on `body.orderStatus`.
+- The first verify on a `Paid (7)` order moves it to `Approve (8)`.
+- `message: "Invalid Token"` means the token is unknown or belongs to another store.
 
 ---
 
@@ -59,7 +75,10 @@ POST /v1/payment/verify { token }
 | 5 | UserCanceled | User canceled at gateway |
 | 7 | Paid | Confirmed on-chain |
 | 8 | Approve | Store approved |
-| 9 | Reject | Store rejected |
+| 9 | Reject | Address no longer monitored, or not verified by the store |
+| 10 | Refunded | Fully refunded to the payer |
+
+`6` (Revert) is reserved and not produced. Status `1` means the customer chose a coin and an address was issued. `riskSpeed` only changes what the checkout shows the customer; an order reaches `Paid` only after the asset's required confirmations either way.
 
 ---
 
@@ -74,15 +93,14 @@ POST /v1/payment/verify { token }
 ## 📂 Repo Structure
 
 ```
-/prd.md           # Product requirement doc with flows + acceptance checklist
-/examples/        # Sample code snippets (TS, Node, .NET)
-/swagger.json     # Full Paymento API schema
+/prd.md           # Product requirement doc with flows, snippets + acceptance checklist
+/swagger.json     # Paymento external API schema
 ```
 
 ---
 
 ## 📬 Support
 
-- **Docs**: https://paymento.io
+- **Docs**: https://docs.paymento.io
 - **Email**: support@paymento.io
 - **Community**: Telegram + Discord https://paymento.io/contact-us
