@@ -845,7 +845,8 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "description": "IPN HTTP method. 1 HttpPost, 2 HttpPut. Any other value (including 0) is sent as PUT; set 1 for POST."
       },
       "InfoModel": {
         "type": "object",
@@ -989,10 +990,12 @@
           6,
           7,
           8,
-          9
+          9,
+          10
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "description": "0 Initialize, 1 Pending, 2 PartialPaid, 3 WaitingToConfirm, 4 Timeout, 5 UserCanceled, 6 Revert (reserved, not produced), 7 Paid, 8 Approve, 9 Reject, 10 Refunded. Serialized as an integer."
       },
       "PaymentCoin": {
         "type": "object",
@@ -1033,7 +1036,8 @@
         "properties": {
           "fiatAmount": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "Digits with an optional \".\" decimal point, e.g. \"1000.50\". Thousands separators and decimal commas are refused."
           },
           "fiatCurrency": {
             "type": "string",
@@ -1071,6 +1075,12 @@
               "$ref": "#/components/schemas/AdditionalData"
             },
             "nullable": true
+          },
+          "tokenExpiryDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Optional token expiry (UTC). Defaults to the store's token lifetime."
           }
         },
         "additionalProperties": false
@@ -1157,13 +1167,15 @@
           1
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "description": "0 High: the checkout tells the customer the payment was received once it is seen on-chain (mempool/block). 1 Low: the checkout waits for confirmations. Either way the order only becomes Paid (7) after the asset's required confirmations. Optional; defaults to 0."
       },
       "StringGeneralResponse": {
         "type": "object",
         "properties": {
           "success": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "payment/request failures return HTTP 200 with success=false and a message; check it before using body."
           },
           "message": {
             "type": "string",
@@ -1206,6 +1218,15 @@
               "$ref": "#/components/schemas/AdditionalData"
             },
             "nullable": true
+          },
+          "settlement": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SettlementResponse"
+              }
+            ],
+            "nullable": true,
+            "description": "Present for every authorized verify; omitted/null when the token is invalid."
           }
         },
         "additionalProperties": false
@@ -1214,7 +1235,8 @@
         "type": "object",
         "properties": {
           "success": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True only when the order is Approve after this call. False is NOT an error: branch on body.orderStatus; message \"Invalid Token\" means unknown token or another store's."
           },
           "message": {
             "type": "string",
@@ -1225,15 +1247,155 @@
           }
         },
         "additionalProperties": false
+      },
+      "TransactionStatus": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "type": "integer",
+        "format": "int32",
+        "description": "0 Pending, 1 Mempool, 2 InBlock, 3 Completed, 4 Revert, 5 UnWatch, 6 Invalid. Serialized as an integer."
+      },
+      "SettlementTransactionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "txHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "explorerUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Block explorer link when configured."
+          },
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "description": "Normalized amount credited for this transaction."
+          },
+          "confirmations": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "description": "Null while there is no block height (e.g. mempool)."
+          },
+          "requiredConfirmations": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/TransactionStatus"
+          },
+          "blockHeight": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "detectedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "fromAddresses": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sender address(es) as stored (may be a JSON-encoded array string)."
+          },
+          "toAddress": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "SettlementResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expectedCryptoAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "description": "Amount the customer was asked to pay (crypto)."
+          },
+          "requestedFiatAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "description": "Fiat amount quoted for the order, if set."
+          },
+          "pendingTxHash": {
+            "type": "string",
+            "nullable": true,
+            "description": "Expected tx hash before any tx is persisted (wallet-signed flow)."
+          },
+          "toAddress": {
+            "type": "string",
+            "nullable": true,
+            "description": "Deposit address for this payment."
+          },
+          "asset": {
+            "type": "string",
+            "nullable": true
+          },
+          "network": {
+            "type": "string",
+            "nullable": true
+          },
+          "standard": {
+            "type": "string",
+            "nullable": true,
+            "description": "Native, ERC20, TRC20, SPL, ..."
+          },
+          "contractAddress": {
+            "type": "string",
+            "nullable": true
+          },
+          "receivedCryptoAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "description": "Sum credited from Mempool, InBlock and Completed transactions."
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettlementTransactionResponse"
+            }
+          }
+        }
       }
     },
     "securitySchemes": {
-      "Bearer": {
+      "ApiKey": {
         "type": "apiKey",
-        "description": "JWT Authorization header using the Bearer scheme.\r\n                      Enter 'Bearer' [space] and then your token in the text input below.\r\n                      Example: 'Bearer 12345abcdef..'",
-        "name": "Authorization",
-        "in": "header"
+        "in": "header",
+        "name": "Api-Key",
+        "description": "Merchant API key from the Paymento dashboard."
       }
     }
-  }
+  },
+  "servers": [
+    {
+      "url": "https://api.paymento.io",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "ApiKey": []
+    }
+  ]
 }
