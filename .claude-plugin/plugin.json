@@ -5,5 +5,6 @@
   "author": { "name": "Paymento", "email": "support@paymento.io", "url": "https://paymento.io" },
   "homepage": "https://docs.paymento.io",
   "repository": "https://github.com/paymento/ai",
+  "license": "MIT",
   "keywords": ["paymento", "crypto", "payments", "payment-gateway", "bitcoin", "usdt", "usdc", "ipn", "webhooks", "non-custodial"]
 }

@@ -1,6 +1,7 @@
 ---
 name: paymento-accept-payments
 description: Integrate Paymento, a non-custodial crypto payment gateway, so a website or app can accept Bitcoin, Ethereum, USDT, USDC and other crypto payments paid straight to the merchant's own wallet. Use when the user wants to accept crypto payments, add a crypto checkout or "pay with crypto" button, integrate Paymento's API, handle Paymento IPN callbacks or HMAC signatures, verify Paymento payments, or review or debug an existing Paymento integration, in any backend (Node.js, Next.js, Python, PHP, Laravel, .NET, Go and others).
+license: MIT
 ---
 
 # Paymento: accept crypto payments
