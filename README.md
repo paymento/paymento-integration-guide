@@ -46,6 +46,7 @@ https://app.paymento.io/gateway?token=YOUR_TOKEN
 
 - Body (PascalCase): `{ Token, PaymentId, OrderId, OrderStatus, AdditionalData }` — `PaymentId`/`OrderId` are strings, `OrderStatus` an integer
 - Verify the `X-HMAC-SHA256-SIGNATURE` header: uppercase hex HMAC-SHA256 of the raw body with your secret key; answer `401` on mismatch
+- Store the callback durably **before** calling Verify, and retry unprocessed ones yourself: Verify moves `Paid` to `Approve`, after which Paymento stops retrying
 
 ### 4. Verify Payment
 

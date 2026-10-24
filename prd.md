@@ -159,16 +159,33 @@ export function isValidIpnSignature(rawBody:unknown, signature:string|undefined)
 
 The callback body is PascalCase: `{ Token, PaymentId, OrderId, OrderStatus, AdditionalData: [{ Key, Value }] }`. `PaymentId` and `OrderId` are strings; `OrderStatus` is an integer.
 
+**Store the callback before calling Verify.** Verify moves a `Paid` order to `Approve`, and Paymento only retries callbacks for orders still in `Paid`. If your process fails after Verify but before your order is updated, Paymento will never call again — so the retry has to come from your own store, not from Paymento. `PaymentoInbox` is a durable table (one row per callback: `id`, `token`, `processedAt`).
+
 ```ts
+export async function processPaymentoCallback(id:string, token:string){
+  const verified = await paymento.verify(token);   // source of truth; moves Paid → Approve, safe to repeat
+  await Orders.applyPaymentoStatus(verified.orderId, verified.orderStatus);   // idempotent
+  await PaymentoInbox.markProcessed(id);
+}
+
 const ipnHandler:express.RequestHandler = async (req,res,next)=>{
+  let id:string, token:string;
   try{
     if(!isValidIpnSignature(req.body, req.get("x-hmac-sha256-signature"))) return res.sendStatus(401);
-    const { Token: token } = JSON.parse(req.body.toString("utf8"));
-    const verified = await paymento.verify(token);   // source of truth; also moves Paid → Approve
-    await Orders.applyPaymentoStatus(verified.orderId, verified.orderStatus);   // idempotent
-    res.sendStatus(200);
-  }catch(err){ next(err); }   // Express 4 does not catch async errors on its own
+    ({ Token: token } = JSON.parse(req.body.toString("utf8")));
+    id = await PaymentoInbox.save(token);   // a new row per callback, so a later status is never marked done by an earlier one
+  }catch(err){ return next(err); }   // not stored: answer 5xx (Express 4 does not catch async errors on its own)
+  try{ await processPaymentoCallback(id, token); }
+  catch(err){ console.error("PAYMENTO_CALLBACK_DEFERRED", id, err); }   // stays pending for the retry job
+  res.sendStatus(200);   // stored, so retrying is now our job
 };
+
+// Run every minute (cron / queue worker). Alert on rows pending for more than an hour.
+export async function retryPendingPaymentoCallbacks(){
+  for(const { id, token } of await PaymentoInbox.pending()){
+    await processPaymentoCallback(id, token).catch(err => console.error("PAYMENTO_CALLBACK_RETRY", id, err));
+  }
+}
 // Paymento sends PUT unless ipN_Method is 1, so accept both.
 app.post("/api/paymento/ipn", express.raw({type:"application/json"}), ipnHandler);
 app.put ("/api/paymento/ipn", express.raw({type:"application/json"}), ipnHandler);
@@ -181,6 +198,7 @@ app.put ("/api/paymento/ipn", express.raw({type:"application/json"}), ipnHandler
 * [ ] Checks `success` on `payment/request`; never redirects with an empty token.
 * [ ] Redirects to `gateway?token=...` after `request`.
 * [ ] IPN endpoint **verifies HMAC** (uppercase hex, constant-time compare) and returns `401` on mismatch or missing header.
+* [ ] Persists each authenticated IPN durably **before** calling Verify, and retries unprocessed ones from its own job.
 * [ ] Calls **Verify API** on IPN; branches on `body.orderStatus`, not `success`; fulfillment is **idempotent**.
 * [ ] Status codes mapped (including `10 Refunded`) and user‑visible order states updated.
 * [ ] Errors bubble with machine‑readable codes; logs include `{orderId, token, status}`.
@@ -220,7 +238,7 @@ Enable any web/app backend to accept crypto via Paymento with a single flow.
 1. **Request**: backend calls `POST /v1/payment/request`; on `success: false` show/log `message` and stop.
 2. **Redirect**: browser → `gateway?token`.
 3. **IPN**: Paymento calls the merchant IPN URL with body `{ Token, PaymentId, OrderId, OrderStatus, AdditionalData[] }` (PascalCase; `PaymentId`/`OrderId` strings, `OrderStatus` integer) and header `X-HMAC-SHA256-SIGNATURE`.
-4. **Verify**: backend calls `POST /v1/payment/verify` with `{ token }`. A `Paid` order becomes `Approve` on this call.
+4. **Persist + Verify**: backend stores the authenticated callback, then calls `POST /v1/payment/verify` with `{ token }`. A `Paid` order becomes `Approve` on this call, which ends Paymento's retries — unprocessed callbacks are retried from the merchant's own store.
 5. **Fulfill**: if `body.orderStatus` is `Approve(8)` (or `Paid(7)`), mark order paid. Do **not** fulfil on `WaitingToConfirm(3)`. Handle `PartialPaid(2)`, `Timeout(4)`, `Reject(9)`, `Refunded(10)` per business rules.
 
 ⚠️ **Important Implementation Note**: Environment variables (`PAYMENTO_API_KEY`, `PAYMENTO_IPN_SECRET`, etc.) must only be accessed on the **server-side**. If you call `createPayment` or `request()` from client-side code (React components), these secrets will not be available and will break security. Always wrap Paymento API calls inside a server-side API route.
@@ -260,7 +278,7 @@ Enable any web/app backend to accept crypto via Paymento with a single flow.
 ## Non‑Functional
 
 * **Observability**: Log correlation IDs; capture raw IPN signature and hash match boolean.
-* **Resilience**: Retry Verify with backoff on 5xx. Answer the IPN with `2xx` quickly once processed; Paymento retries failed callbacks for `Paid` orders only, so a dropped IPN for other statuses is not resent — Verify covers the gap.
+* **Resilience**: Paymento retries failed callbacks only while the order is still `Paid`; the first successful Verify moves it to `Approve` and ends those retries, and callbacks for other statuses are never resent. So persist every authenticated IPN in a durable inbox **before** calling Verify, answer `2xx` once it is stored, and retry unprocessed rows (Verify → update order → mark processed) from your own job with backoff until they succeed. Verify and fulfillment are idempotent, so reprocessing is safe. Answer `5xx` only when the callback could not be stored.
 * **Security**: Validate token shape; reject if signature mismatch.
 
 ## Test Cases
@@ -270,6 +288,8 @@ Enable any web/app backend to accept crypto via Paymento with a single flow.
 * Verify with unknown token → `PAYMENTO_VERIFY_FAILED`, no state change
 * `payment/request` returning `success: false` → error surfaced, no redirect
 * IPN delivered as PUT (when `ipN_Method` is not 1)
+* Order update fails after Verify (order now `Approve`) → callback stays pending and the retry job fulfils it
+* Callback cannot be stored → `5xx`, Verify not called
 * Duplicate IPN (ignored)
 * PartialPaid → manual review
 * Timeout → auto-cancel
