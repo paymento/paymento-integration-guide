@@ -1,0 +1,12 @@
+{
+  "name": "paymento",
+  "description": "Official Paymento plugins for AI coding agents",
+  "owner": { "name": "Paymento", "email": "support@paymento.io" },
+  "plugins": [
+    {
+      "name": "paymento",
+      "source": "./",
+      "description": "Accept crypto payments with Paymento: integrate payment requests, signed IPN callbacks and verification into any website or app."
+    }
+  ]
+}
