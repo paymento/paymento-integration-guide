@@ -55,6 +55,12 @@ node --experimental-transform-types --no-warnings tests/check-nodejs-reference.t
 claude plugin validate .
 ```
 
+## License
+
+[MIT](LICENSE), Copyright (c) 2026 Prokey Technologies Inc. Copy the snippets into your own code freely.
+
+Paymento and the Paymento logo are trademarks of Prokey Technologies Inc. This license does not grant rights to use them.
+
 ## Support
 
 - **Docs**: https://docs.paymento.io
