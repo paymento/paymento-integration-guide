@@ -1,0 +1,13 @@
+{
+  "name": "paymento",
+  "owner": { "name": "Paymento", "email": "support@paymento.io" },
+  "interface": { "displayName": "Paymento" },
+  "plugins": [
+    {
+      "name": "paymento",
+      "source": "./",
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Finance"
+    }
+  ]
+}

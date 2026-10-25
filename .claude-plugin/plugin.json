@@ -1,10 +1,26 @@
 {
   "name": "paymento",
+  "displayName": "Paymento",
   "version": "1.0.0",
   "description": "Accept crypto payments with Paymento, a non-custodial gateway: payment requests, signed IPN callbacks, verification and order fulfilment, done right.",
-  "author": { "name": "Paymento", "email": "support@paymento.io", "url": "https://paymento.io" },
+  "author": {
+    "name": "Paymento",
+    "email": "support@paymento.io",
+    "url": "https://paymento.io"
+  },
   "homepage": "https://docs.paymento.io",
   "repository": "https://github.com/paymento/ai",
   "license": "MIT",
-  "keywords": ["paymento", "crypto", "payments", "payment-gateway", "bitcoin", "usdt", "usdc", "ipn", "webhooks", "non-custodial"]
+  "keywords": [
+    "paymento",
+    "crypto",
+    "payments",
+    "payment-gateway",
+    "bitcoin",
+    "usdt",
+    "usdc",
+    "ipn",
+    "webhooks",
+    "non-custodial"
+  ]
 }
