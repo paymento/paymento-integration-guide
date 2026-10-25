@@ -21,7 +21,15 @@ claude plugin marketplace add paymento/ai
 claude plugin install paymento@paymento
 ```
 
-**Cursor, Codex, OpenCode and 75+ other agents** ([skills CLI](https://skills.sh))
+**Codex**
+
+```bash
+codex plugin marketplace add paymento/ai
+```
+
+then install **Paymento** from the Plugins directory.
+
+**Cursor, OpenCode and 75+ other agents** ([skills CLI](https://skills.sh))
 
 ```bash
 npx skills add paymento/ai
@@ -44,6 +52,9 @@ skills/paymento-accept-payments/
 openapi.json                   # Paymento external API schema
 tests/                         # checks that the reference code still behaves as documented
 .claude-plugin/                # Claude Code plugin and marketplace manifests
+plugin.json                    # Agent Plugins manifest (Cursor, Codex)
+.agents/plugins/               # Codex marketplace
+assets/logo.svg                # plugin logo
 ```
 
 ## Development

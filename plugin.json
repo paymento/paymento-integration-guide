@@ -1,0 +1,62 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "paymento",
+  "version": "1.0.0",
+  "description": "Accept crypto payments with Paymento, a non-custodial gateway: payment requests, signed IPN callbacks, verification and order fulfilment, done right.",
+  "author": { "name": "Paymento", "email": "support@paymento.io", "url": "https://paymento.io" },
+  "homepage": "https://docs.paymento.io",
+  "repository": "https://github.com/paymento/ai",
+  "license": "MIT",
+  "keywords": ["paymento", "crypto", "payments", "payment-gateway", "bitcoin", "usdt", "usdc", "ipn", "webhooks", "non-custodial"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Paymento",
+        "shortDescription": "Accept crypto payments, non-custodially.",
+        "longDescription": "Integrate Paymento crypto checkout into any website or app: payment requests, the gateway redirect, signed IPN callbacks, verification and safe order fulfilment. Customers pay straight to the merchant's own wallet.",
+        "developerName": "Paymento",
+        "category": "Finance",
+        "websiteURL": "https://paymento.io",
+        "privacyPolicyURL": "https://paymento.io/privacy-policy/",
+        "termsOfServiceURL": "https://paymento.io/term-of-service/",
+        "supportURL": "https://paymento.io/contact-us/",
+        "defaultPrompt": [
+          "Add Paymento crypto checkout to this app",
+          "Review my Paymento IPN handler",
+          "Why is my Paymento payment stuck as WaitingToConfirm?"
+        ],
+        "brandColor": "#0175CE",
+        "composerIcon": "./assets/logo.svg",
+        "logo": "./assets/logo.svg"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Add crypto checkout to an Express app",
+              "user_prompt": "Add Paymento crypto checkout to this Express app",
+              "expected_behavior": "Uses the paymento-accept-payments skill: creates the payment server-side and checks success, saves the token, redirects to the gateway, adds an IPN route that checks the HMAC over the raw body, stores the callback before verify, and fulfils on orderStatus 7 or 8."
+            },
+            {
+              "description": "Review an IPN handler",
+              "user_prompt": "Review my Paymento IPN handler for problems",
+              "expected_behavior": "Checks the handler against the skill's rules: raw-body HMAC with constant-time compare, POST and PUT, stored callback before verify, per-token lock, never un-paying an order."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Unrelated payments provider",
+              "user_prompt": "Set up Stripe subscriptions for my SaaS"
+            },
+            {
+              "description": "Crypto price question",
+              "user_prompt": "What is the current price of Bitcoin?"
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "This plugin helps developers integrate a payment gateway; it does not sell products or process payments itself."
+      }
+    }
+  }
+}
