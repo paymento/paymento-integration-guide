@@ -3,7 +3,7 @@
 import crypto from "crypto";
 import assert from "assert";
 declare namespace express { type RequestHandler = any }
-process.env.PAYMENTO_IPN_SECRET="my-secret"; process.env.PAYMENTO_API_BASE="https://x"; process.env.PAYMENTO_API_KEY="k";
+process.env.PAYMENTO_IPN_SECRET="my-secret"; process.env.PAYMENTO_API_BASE="https://api.paymento.io";  // fetch is stubbed below; nothing is sent process.env.PAYMENTO_API_KEY="k";
 const applied:any[]=[]; let failApply=false, failSave=false;
 const locks=new Map<string,Promise<any>>(); let useLock=true;
 const tokenToOrder=new Map<string,string>(); const orderStatus=new Map<string,number>();
