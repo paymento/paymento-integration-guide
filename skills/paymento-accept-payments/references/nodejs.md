@@ -1,6 +1,6 @@
 # Node.js / TypeScript reference
 
-Drop-in code for a Node.js backend (Express shown; the same functions work in Next.js route handlers, Fastify or serverless functions). Every block here is exercised by `tests/check-nodejs-reference.ts` in the [paymento/ai](https://github.com/paymento/ai) repository.
+Drop-in code for a Node.js backend (Express shown; the same functions work in Next.js route handlers, Fastify or serverless functions). Every block here is exercised by `tests/check-nodejs-reference.ts` in this repository.
 
 Environment (server-side only):
 
