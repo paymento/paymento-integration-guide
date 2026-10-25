@@ -57,6 +57,19 @@ plugin.json                    # Agent Plugins manifest (Cursor, Codex)
 assets/logo.svg                # plugin logo
 ```
 
+## Data handling
+
+The plugin contains an agent skill and documentation only: no MCP server, connector or hooks. It does not read, store or send personal data, and it never reads the installer's credentials.
+
+Data leaves the machine in two places, both under the developer's control:
+
+| What | Sends to | Data |
+| --- | --- | --- |
+| `scripts/send-test-ipn.mjs`, when the developer runs it | The IPN URL the developer passes on the command line (their own endpoint) | A synthetic test callback, signed with `PAYMENTO_IPN_SECRET` from the developer's environment. The secret itself is not sent. |
+| The integration code the skill writes into the merchant's app, at the app's runtime | `https://api.paymento.io` (Paymento's API) | Payment requests and verifications, authenticated with the merchant's own `PAYMENTO_API_KEY` |
+
+Nothing is sent to Paymento or anyone else by the plugin itself.
+
 ## Development
 
 The Node.js reference is executable documentation: `tests/check-nodejs-reference.ts` extracts its code blocks and runs them against signed callbacks, failure cases and a concurrency race.
